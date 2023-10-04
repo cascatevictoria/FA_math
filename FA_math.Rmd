@@ -1,0 +1,248 @@
+---
+title: "Regression and Factor Analysis: TIMSS data"
+author: "Victoria Bolotova"
+date: "15 06 2022"
+output: 
+    html_document:
+      theme: cosmo
+      code_folding: show
+      toc: true
+      toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+# Data Preparation
+
+## Reading data
+
+```{r}
+library(dplyr)
+library(foreign)
+library(haven)
+df <- read_spss("asgrusb7.sav") #2128 observations
+
+df <- df %>%
+  select(ASMMAT01, ASBGSSB, ASBGSCM, ASBG01, ASBG11A, ASBG11B, ASBG11C, ASBG11D, ASBG11E, ASBG11F, ASBG11G, ASBG11H, ASBG11I, ASBG11J, ASBG11K)
+
+df <- na.omit(df)
+```
+
+**RQ:** *What factors are associated with academic achievement in math?*
+
+## Transformation of variables into correct type
+
+Transformation of variables used in 1st task:
+
+```{r}
+df$ASMMAT01 <- as.numeric(as.character(df$ASMMAT01))
+df$ASBGSSB <- as.numeric(as.character(df$ASBGSSB))
+df$ASBGSCM <- as.numeric(as.character(df$ASBGSCM))
+```
+
+# 1st Task
+
+*"Run linear regression, explaining math achievement (ASMMAT01) with student’s sense of belonging to school (ASBGSSB) and student’s confidence in mathematics (ASBGSCM). Do not forget to add control variables."*
+
+```{r}
+library(sjPlot)
+labs <- c("Constant",
+  "Gender (Boy)",
+  "Sense of belonging to school", 
+  "Confidence in mathematics")
+
+model_1 <- lm(ASMMAT01 ~ ASBG01 + ASBGSSB + ASBGSCM, data = df)
+tab_model(model_1, pred.labels = labs, title = "Linear regression: explaining math achievement", dv.labels = "Math achievement")
+```
+
+* For boys predicted math achievement is on 9.23 lower, than for girls on average, holding everything else constant.
+
+* Every one unit increase in sense of belonging to school leads to 2.43 decrease in the math achievement on average, holding everything else constant. This is unexpected result.
+
+* Every one unit increase in confidence in mathematics leads to 15.2 increase in the math achievement on average, holding everything else constant.
+
+* Adjusted R-squared equals 0.18, it means that 18% of variance in students' math achievement can be explained by this model. Thus, I can conclude the explanatory power is good as 18% of the variation in math achievement is completely explained by two explanatory variable and one control variable.
+
+
+# 2nd Task
+
+*"For the variables describing bullying (ASBG11A, ASBG11B, ASBG11C, ASBG11D, ASBG11E, ASBG11F, ASBG11G, ASBG11H, ASBG11I, ASBG11J, ASBG11K) run EFA. How many factors do you get? What type of rotation did you choose and why? Describe the fit of the model, reliability of the factors. Give names to the factors and interpret them briefly."*
+
+## Preparatory steps for EFA 
+
+### Selecting manifest variables
+
+```{r}
+bullying <- df %>% select(ASBG11A, ASBG11B, ASBG11C, ASBG11D, ASBG11E, ASBG11F, ASBG11G, ASBG11H, ASBG11I, ASBG11J, ASBG11K)
+```
+
+### Look at variables
+
+```{r}
+view_df(bullying)
+```
+
+### Transformations
+
+Let's recode variables to numbers:
+
+```{r}
+bullying[, 1:11] <- lapply(bullying[, 1:11], as.factor)
+```
+
+We should transform all variables into a factor type, because all variables have only 4 levels. Moreover, these variables are of ordinal type of measurement, so we cannot treat them as numeric. 
+
+```{r}
+sapply(bullying, class) 
+```
+
+```{r}
+bullying <- as.data.frame(bullying)
+library(psych)
+library(polycor) #polychoric correlations
+library(corrplot)
+bul_cor <- hetcor(bullying) #heterogeneous correlations
+cor.plot(bul_cor$correlations)
+```
+
+* All variables are positively correlated 
+* Some variables have large correlations between each other (from 0.6 to 0.65)
+* Most variable have medium correlations between each other (from 0.4 to 0.58)
+* However, there are also small correlations (from 0.28 to 0.38)
+* ASBG11B (LEFT OUT OF GAMES) has small correlations with all variables, except for ASBG11C (SPREADING LIES ABOUT ME) (0.42)
+
+
+### Parallel Analysis screen plot
+
+* Helps determine the number of factors
+
+```{r}
+fa.parallel(bul_cor$correlations, n.obs=2032, fa="fa", n.iter=100) 
+```
+
+* We should look where red dotted line is crossed with triangles' line. The number of factors should be determined by the number of triangles before this intersection. Also, we can look at black horizontal line (eigenvalues). 
+
+* As for red dotted line, there are 3 triangles before the intersection and the 4th triangle is crossed by red dotted line. According to this approach, we should use 4 factors. Also, in system message there is a hint for us: "Parallel analysis suggests that the number of factors =  4"
+
+* But, according to eigenvalues, we should extract 1 factor. 
+
+* Thus, let's start from the biggest number - 4 factors.
+
+## EFA
+
+### Four factors 
+
+* by default, rotation is enabled
+
+```{r}
+library(GPArotation)
+fa(bul_cor$correlations, 4, cor = "mixed")
+```
+
+- Interpretation:
+  - Satisfactory cumulative var, can be considered as acceptable (0.59)
+  - RMSR is 0.01, which is very good
+  - Mean item complexity 1.5, which indicates a problem
+  - As for Proportion Var (proportion of variance which is explained by each factor), the last factor (MR4) explains only 0.03% of variance, which is very-very small. According to the rule of thumb, one factor should explain at least 10% of variance. Thus, it indicates that we should reduce the number of factors to 3 factors. As for the third factor (MR3), its proportion var equals to 0.12, which is acceptable.
+  - Also, we should look at Proportion Explained. We can see a big gap between the factors in terms of proportion of variances explained, which also indicates that we should reduce the number of factors to at least 3. 
+  - RMSEA and Tucker Lewis Index are not shown in the output
+  
+- Factor loadings:
+  - There are problematic manifest variables, according to loading. ASBG11G (FORCE TO DO STH) has the highest factor loading 0.3, which is not acceptable. ASBG11K (THREATENED) has the highest factor loading, which equals to 39. 
+  - ASBG11B has very high uniqueness (0.7), its highest factor loading is 0.5. 
+  
+However, I think it is better to run the EFA with 3 factors, and then look at factor loadings and other parameters to decide on deleting problematic manifest variables. 
+
+### Three factors 
+
+```{r}
+library(GPArotation)
+fa <- fa(bul_cor$correlations, 3, cor = "mixed", fm="ml",  scores=T)
+fa
+```
+
+- Interpretation:
+  - Satisfactory cumulative var, can be considered as acceptable (0.57), only on 0.02 points smaller than for model with 4 factors
+  - RMSR is 0.02, which is very good, but on 0.01 higher than for first model
+  - Mean item complexity 1.3, which is good, on 0.2 smaller than for first model
+  - As for Proportion Var and Proportion Explained, everything is looking good now.
+  - RMSEA and Tucker Lewis Index are not shown in the output
+
+- I have tried different types of rotation, but they did not help in improvement main metrics.
+
+- Factor loadings:
+  - ASBG11B still has very high uniqueness (0.77), its highest factor loading is 0.39 now. 
+  - ASBG11G has high uniqueness (0.51), its highest factor loading is 0.38. 
+  - However, we can use 0.3 as the threshold and not delete these variables
+  - There are no big problems with other manifest variables
+
+### Visualization
+
+```{r}
+fa.diagram(fa)
+```
+
+- MR2 - *Cyberbullying*
+  - ASBG11I (SHARED THINGS ONLINE)
+  - ASBG11J (SHARED PHOTOS ONLINE)
+  - ASBG11H (SENT HURTFUL MESSAGES)
+  
+All these manifest variables are connected with bullying that is perpetrated via digital technologies.
+  
+- MR3 - *Doing smth bad with my belongings*
+  - ASBG11D (STEALING STH FROM ME)
+  - ASBG11E (DAMAGING STH OF MINE)
+  
+This factor reflects stealing or damaging belongings of a victim. Thus, this form of bullying perpetrated by causing harm to personal belongings. 
+  
+- MR1 - *General forms of bullying*
+  - ASBG11F (HURT BY OTHERS)
+  - ASBG11A (MADE FUN OF)
+  - ASBG11C (SPREADING LIES ABOUT ME)
+  - ASBG11K (THREATENED)
+  - ASBG11B (LEFT OUT OF GAMES)
+  - ASBG11G (FORCE TO DO STH)
+  
+This factor reflects different and most general and widespread forms of bullying, that includes direct forms such as physical and verbal victimization as well as indirect such as social exclusion.
+
+# 3rd Task 
+
+## Preparation 
+
+```{r}
+library(lavaan)
+
+model_bul <- '
+cyberbullying =~ ASBG11I + ASBG11J + ASBG11H
+belongings =~ ASBG11D + ASBG11E
+general =~ ASBG11F + ASBG11A + ASBG11C + ASBG11K + ASBG11B + ASBG11G
+'
+bullying[,] <- lapply(bullying[,], ordered)
+
+fit_cfa = cfa(model_bul, data = bullying)
+
+df[,16:18] = lavPredict(fit_cfa, method = "regression")
+colnames(df)[16:18] = c("cyberbullying", "belongings", "general")
+```
+
+## Linear regression
+
+```{r}
+library(sjPlot)
+labs <- c("Constant",
+  "Gender (Boy)",
+  "Sense of belonging to school", 
+  "Confidence in mathematics", 
+  "Cyberbullying", 
+  "Doing smth bad with belongings", 
+  "General forms of bullying")
+
+model_2 <- lm(ASMMAT01 ~ ASBG01 + ASBGSSB + ASBGSCM + cyberbullying + belongings + general, data = df)
+tab_model(model_2, pred.labels = labs, title = "Linear regression, : explaining math achievement", dv.labels = "Math achievement")
+```
+
+* Variables connected with bullying are not significant in predicting math achievement.
+* Probably, bullying is more strongly related with psychological adaptation than with academic one. 
